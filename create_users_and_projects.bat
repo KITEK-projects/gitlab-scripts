@@ -19,42 +19,38 @@ for /L %%i in (1,1,%USER_COUNT%) do (
     set PASSWORD=omsktec%%i
 
     echo ----------------------------------------
-    echo Creating user !USERNAME! with password !PASSWORD!
+    echo Creating user !USERNAME!
 
-    REM Create user and capture response
-    for /f "delims=" %%R in ('
+    REM Create user
+    for /f "tokens=2 delims=:" %%A in ('
         curl -s -X POST "%GITLAB_URL%/api/v4/users" ^
-            -H "PRIVATE-TOKEN: %GITLAB_TOKEN%" ^
-            -H "Content-Type: application/json" ^
-            -d "{\"email\":\"!EMAIL!\",\"username\":\"!USERNAME!\",\"name\":\"!NAME!\",\"password\":\"!PASSWORD!\",\"skip_confirmation\":true}"
-    ') do set RESPONSE=%%R
+          -H "PRIVATE-TOKEN: %GITLAB_TOKEN%" ^
+          -H "Content-Type: application/json" ^
+          -d "{\"email\":\"!EMAIL!\",\"username\":\"!USERNAME!\",\"name\":\"!NAME!\",\"password\":\"!PASSWORD!\",\"skip_confirmation\":true}"
+    ') do (
+        set RAW=%%A
+        goto got_id
+    )
 
-    REM Extract user ID using PowerShell
-    for /f %%U in ('
-        echo !RESPONSE! ^| powershell -Command "(ConvertFrom-Json (Get-Content -Raw)).id"
-    ') do set USER_ID=%%U
+    :got_id
+    set USER_ID=!RAW:,=!
+    set USER_ID=!USER_ID:}=!
 
     if "!USER_ID!"=="" (
         echo FAILED to create user !USERNAME!
-        echo Response: !RESPONSE!
         echo.
-        goto :continue
+    ) else (
+        echo User ID = !USER_ID!
+
+        REM Create project owned by user
+        curl -s -X POST "%GITLAB_URL%/api/v4/projects" ^
+          -H "PRIVATE-TOKEN: %GITLAB_TOKEN%" ^
+          -H "Content-Type: application/json" ^
+          -d "{\"name\":\"!USERNAME!\",\"namespace_id\":!USER_ID!,\"visibility\":\"public\"}"
+
+        echo.
     )
-
-    echo User ID = !USER_ID!
-
-    REM Create public project owned by this user
-    echo Creating project !USERNAME! for user !USERNAME!
-
-    curl -s -X POST "%GITLAB_URL%/api/v4/projects" ^
-        -H "PRIVATE-TOKEN: %GITLAB_TOKEN%" ^
-        -H "Content-Type: application/json" ^
-        -d "{\"name\":\"!USERNAME!\",\"namespace_id\":!USER_ID!,\"visibility\":\"public\"}"
-
-    echo.
-    :continue
 )
 
-echo ALL USERS AND PROJECTS CREATED
+echo DONE
 pause
-

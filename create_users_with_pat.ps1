@@ -1,4 +1,3 @@
-
 # ==============================
 # CONFIG
 # ==============================
@@ -79,18 +78,32 @@ for ($i = 1; $i -le $UserCount; $i++) {
     $UserId = $User[0].id
     Write-Host "User ID = $UserId"
 
-    # ==============================
-    # 3. Create project using ADMIN token
-    # ==============================
-    Write-Host "Creating project $Username owned by $Username via admin token"
+    # 3. Create PAT
+    Write-Host "Creating token for $Username"
+    $TokenResponse = Invoke-GitLab -Method POST `
+        -Url "$GitLabUrl/api/v4/users/$UserId/personal_access_tokens" `
+        -Token $AdminToken `
+        -Body @{
+            name = "auto-token"
+            scopes = @("api")
+        }
+
+    $UserToken = $TokenResponse.token
+
+    if (-not $UserToken) {
+        Write-Error "Failed to create token for $Username"
+        continue
+    }
+
+    # 4. Create project AS USER
+    Write-Host "Creating project $Username as $Username"
 
     try {
         Invoke-GitLab -Method POST `
             -Url "$GitLabUrl/api/v4/projects" `
-            -Token $AdminToken `
+            -Token $UserToken `
             -Body @{
                 name = $Username
-                namespace_id = $UserId      # important: sets user as owner
                 visibility = "public"
             }
     }
